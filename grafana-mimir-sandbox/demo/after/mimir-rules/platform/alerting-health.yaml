@@ -1,0 +1,14 @@
+# AFTER: NEW file, added once per tenant. Same as Grafana's "Error" state,
+# for every Mimir rule in the tenant.
+namespace: platform
+groups:
+  - name: alerting-health
+    interval: 30s
+    rules:
+      - alert: RuleEvaluationError
+        expr: sum by (rule_group) (increase(cortex_prometheus_rule_evaluation_failures_total[5m])) > 0
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Mimir rule group {{ $labels.rule_group }} is failing to evaluate"
