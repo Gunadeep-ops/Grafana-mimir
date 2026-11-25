@@ -1,0 +1,25 @@
+# AFTER: same file, with a No Data rule added (the merge request change).
+namespace: adtech
+groups:
+  - name: campaigns
+    interval: 30s
+    rules:
+      - alert: LowImpressions
+        expr: sum(rate(impressions_total{job="adtech-app"}[2m])) < 5
+        for: 1m
+        labels:
+          severity: critical
+          team: adtech
+        annotations:
+          summary: "Impressions below 5/s"
+
+      # NEW: same as Grafana's "No Data" state.
+      # Demo uses 2m/1m so it fires quickly; use e.g. [10m] / for: 5m in production.
+      - alert: LowImpressions_NoData
+        expr: absent_over_time(impressions_total{job="adtech-app"}[2m])
+        for: 1m
+        labels:
+          severity: critical
+          team: adtech
+        annotations:
+          summary: "No impressions_total data from job=adtech-app for 2 minutes"
