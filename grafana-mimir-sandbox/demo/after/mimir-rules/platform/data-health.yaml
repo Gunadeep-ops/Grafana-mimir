@@ -1,0 +1,42 @@
+# NEW file: "No Data" protection for ALL alerts, without touching the alert files.
+# Demo uses short windows (offset 15m, for 1m) so it fires quickly.
+# Production: offset 1h (or more), for 5m.
+namespace: data-health
+groups:
+  - name: data-health
+    interval: 30s
+    rules:
+      # Layer 1: any scraped app/exporter is down (one rule for all jobs)
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} ({{ $labels.instance }}) is down - its metrics have no data"
+
+      # Layer 1: the job has disappeared completely (not even "up" arrives), one per important job
+      - alert: AdtechAppNoData
+        expr: absent_over_time(up{job="adtech-app"}[5m])
+        for: 1m
+        labels:
+          severity: critical
+          team: adtech
+        annotations:
+          summary: "No data at all from job=adtech-app"
+
+      # Layer 2: ONE rule for all metrics used by our alerts.
+      # Fires per metric that had data 15m ago but has none now.
+      # Metric list = output of: mimirtool analyze rule-file <rule files>  (edit it in BOTH places)
+      - alert: MetricMissing
+        expr: |
+          label_replace(count by (__name__) ({__name__=~"impressions_total|bid_requests_total|bid_responses_total|bids_won_total"} offset 15m), "metric", "$1", "__name__", "(.+)")
+            unless on (metric)
+          label_replace(count by (__name__) ({__name__=~"impressions_total|bid_requests_total|bid_responses_total|bids_won_total"}), "metric", "$1", "__name__", "(.+)")
+        for: 1m
+        labels:
+          severity: critical
+          team: adtech
+        annotations:
+          summary: "Metric {{ $labels.metric }} had data 15m ago but has none now"
