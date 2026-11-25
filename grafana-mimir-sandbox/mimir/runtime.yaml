@@ -1,0 +1,7 @@
+# Per-tenant overrides, reloaded by Mimir every 10s.
+overrides:
+  sandbox:
+    # 0 = unlimited (normal).
+    # Scenario S7: set to 80 so the high-cardinality CampaignLowImpressions rule
+    # fails to evaluate (impressions_total has 100+ series), then set back to 0.
+    max_fetched_series_per_query: 0

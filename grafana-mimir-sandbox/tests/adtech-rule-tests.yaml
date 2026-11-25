@@ -1,0 +1,98 @@
+# Unit tests for naive vs fixed rules. Run:
+#   docker run --rm -v ${PWD}/tests:/t -w /t --entrypoint promtool prom/prometheus:v3.4.0 test rules adtech-rule-tests.yaml
+rule_files:
+  - adtech-phase1-naive.yaml
+  - adtech-phase2-fixed.yaml
+evaluation_interval: 30s
+tests:
+  # S1: exchange_b series disappear at 5m
+  - interval: 15s
+    input_series:
+      - series: 'bid_requests_total{exchange="exchange_a"}'
+        values: '0+750x60'
+      - series: 'bid_requests_total{exchange="exchange_b"}'
+        values: '0+750x20 stale'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExchangeLowBidRequests
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ExchangeNoTraffic
+        exp_alerts:
+          - exp_labels: { exchange: exchange_b, ruleset: fixed, severity: critical }
+            exp_annotations: { summary: "No bid traffic from exchange_b (series missing or flat)" }
+
+  # S2: exchange_b idle (series present, flat) -> both catch it
+  - interval: 15s
+    input_series:
+      - series: 'bid_requests_total{exchange="exchange_b"}'
+        values: '0+750x20 15000x40'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExchangeLowBidRequests
+        exp_alerts:
+          - exp_labels: { exchange: exchange_b, ruleset: naive, severity: warning }
+            exp_annotations: { summary: "Bid requests from exchange_b below 10/s" }
+          - exp_labels: { exchange: exchange_b, ruleset: fixed, severity: warning }
+            exp_annotations: { summary: "Bid requests from exchange_b below 10/s" }
+      - eval_time: 12m
+        alertname: ExchangeNoTraffic
+        exp_alerts:
+          - exp_labels: { exchange: exchange_b, ruleset: fixed, severity: critical }
+            exp_annotations: { summary: "No bid traffic from exchange_b (series missing or flat)" }
+
+  # S4: lazy counters, exchange_c never wins -> no bids_won series for it
+  - interval: 15s
+    input_series:
+      - series: 'bid_responses_total{exchange="exchange_a"}'
+        values: '0+675x60'
+      - series: 'bids_won_total{exchange="exchange_a"}'
+        values: '0+100x60'
+      - series: 'bid_responses_total{exchange="exchange_c"}'
+        values: '0+675x60'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExchangeLowWinRate
+        exp_alerts:
+          - exp_labels: { exchange: exchange_c, ruleset: fixed, severity: warning }
+            exp_annotations: { summary: "Win rate on exchange_c below 5%" }
+
+  # S5: exchange_d times out: requests continue, responses/wins/latency go flat
+  - interval: 15s
+    input_series:
+      - series: 'bid_requests_total{exchange="exchange_d"}'
+        values: '0+750x60'
+      - series: 'bid_responses_total{exchange="exchange_d"}'
+        values: '0+675x20 13500x40'
+      - series: 'bids_won_total{exchange="exchange_d"}'
+        values: '0+100x20 2000x40'
+      - series: 'bid_latency_seconds_bucket{exchange="exchange_d",le="0.1"}'
+        values: '0+300x20 6000x40'
+      - series: 'bid_latency_seconds_bucket{exchange="exchange_d",le="0.2"}'
+        values: '0+300x20 6000x40'
+      - series: 'bid_latency_seconds_bucket{exchange="exchange_d",le="+Inf"}'
+        values: '0+300x20 6000x40'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExchangeLowWinRate
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ExchangeHighLatencyP99
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ExchangeLowResponseRate
+        exp_alerts:
+          - exp_labels: { exchange: exchange_d, ruleset: fixed, severity: critical }
+            exp_annotations: { summary: "Under 50% of bid requests on exchange_d get a response" }
+
+  # S8: app scrape fails
+  - interval: 15s
+    input_series:
+      - series: 'up{job="adtech-app",instance="adtech-app:8000"}'
+        values: '1x20 0x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AdtechAppDown
+        exp_alerts:
+          - exp_labels: { job: adtech-app, instance: "adtech-app:8000", ruleset: fixed, severity: critical }
+            exp_annotations: { summary: "adtech-app scrape target is down" }

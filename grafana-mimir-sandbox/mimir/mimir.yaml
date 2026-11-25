@@ -1,0 +1,68 @@
+# Single-node (monolithic) Mimir for a sandbox.
+# "all" covers the core components; ruler and alertmanager are listed explicitly.
+target: all,ruler,alertmanager
+
+# Keep this the same as production. If enabled, every client must send X-Scope-OrgID.
+multitenancy_enabled: true
+
+# Per-tenant limits, reloaded every 10s (used for the rule-error scenario)
+runtime_config:
+  file: /etc/mimir/runtime.yaml
+  period: 10s
+
+server:
+  http_listen_port: 9009
+  grpc_listen_port: 9095
+  log_level: info
+
+# Classic architecture (no Kafka). If production uses ingest storage,
+# add Kafka and set this to true with the matching ingest_storage.kafka.* settings.
+ingest_storage:
+  enabled: false
+
+# Filesystem storage keeps the sandbox simple. Production likely uses S3/GCS/Azure;
+# switch to that backend if you want to test storage behavior too.
+blocks_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/blocks
+  tsdb:
+    dir: /data/tsdb
+  bucket_store:
+    sync_dir: /data/tsdb-sync
+
+compactor:
+  data_dir: /data/compactor
+
+ingester:
+  ring:
+    replication_factor: 1
+
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+
+# --- Ruler: evaluates data source-managed rules ---
+ruler:
+  rule_path: /data/ruler-tmp
+  alertmanager_url: http://localhost:9009/alertmanager
+  enable_api: true
+
+ruler_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/ruler
+
+# --- Alertmanager: receives alerts from the ruler ---
+alertmanager:
+  data_dir: /data/alertmanager
+  fallback_config_file: /etc/mimir/alertmanager-fallback.yaml
+  external_url: http://localhost:9009/alertmanager
+  enable_api: true
+  sharding_ring:
+    replication_factor: 1
+
+alertmanager_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/alertmanager-config

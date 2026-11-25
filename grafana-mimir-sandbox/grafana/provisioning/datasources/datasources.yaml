@@ -1,0 +1,27 @@
+apiVersion: 1
+
+datasources:
+  - name: Mimir
+    uid: mimir
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: true
+    jsonData:
+      prometheusType: Mimir
+      manageAlerts: true          # enables data source-managed rules in the Alerting UI
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ${TENANT_ID}
+
+  - name: Mimir Alertmanager
+    uid: mimir-alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://mimir:9009
+    jsonData:
+      implementation: mimir
+      handleGrafanaManagedAlerts: false
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ${TENANT_ID}

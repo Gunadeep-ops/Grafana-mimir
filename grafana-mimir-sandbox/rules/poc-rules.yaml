@@ -1,0 +1,43 @@
+# Data source-managed rules (evaluated by the Mimir ruler).
+# Load with:
+#   docker compose run --rm mimirtool rules load /rules/poc-rules.yaml --address=http://mimir:9009 --id=sandbox
+namespace: poc
+groups:
+  - name: poc-no-data-handling
+    interval: 30s
+    rules:
+      # Target is scraped but down
+      - alert: NodeExporterDown
+        expr: up{job="node"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "node-exporter target is down"
+
+      # "No data" equivalent: series disappeared entirely
+      - alert: NodeMetricsMissing
+        expr: absent_over_time(node_cpu_seconds_total{job="node"}[2m])
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "node_cpu_seconds_total has no data for 2m"
+
+  - name: poc-ruler-health
+    interval: 30s
+    rules:
+      # "Error" equivalent: the ruler failed to evaluate rules
+      - alert: MimirRuleEvaluationFailures
+        expr: sum by (rule_group) (increase(cortex_prometheus_rule_evaluation_failures_total[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rule group {{ $labels.rule_group }} has evaluation failures"
+
+      - alert: MimirRuleGroupMissedIterations
+        expr: sum by (rule_group) (increase(cortex_prometheus_rule_group_iterations_missed_total[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rule group {{ $labels.rule_group }} is missing evaluations"

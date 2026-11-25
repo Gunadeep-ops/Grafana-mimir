@@ -1,0 +1,86 @@
+# Same rules as rules/adtech-phase2-fixed.yaml without the mimirtool "namespace" key (promtool format).
+groups:
+- interval: 30s
+  name: fixed
+  rules:
+  - alert: ExchangeLowBidRequests
+    annotations:
+      summary: Bid requests from {{ $labels.exchange }} below 10/s
+    expr: sum by (exchange) (rate(bid_requests_total[2m])) < 10
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: warning
+  - alert: ExchangeNoTraffic
+    annotations:
+      summary: No bid traffic from {{ $labels.exchange }} (series missing or flat)
+    expr: "count by (exchange) (last_over_time(bid_requests_total[30m]))\n  unless\n\
+      count by (exchange) (rate(bid_requests_total[2m]) > 0)\n"
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: critical
+  - alert: ExchangeLowWinRate
+    annotations:
+      summary: Win rate on {{ $labels.exchange }} below 5%
+    expr: "(\n  sum by (exchange) (rate(bids_won_total[2m]))\n    or\n  sum by (exchange)\
+      \ (rate(bid_responses_total[2m])) * 0\n)\n/ sum by (exchange) (rate(bid_responses_total[2m])\
+      \ > 0)\n< 0.05\n"
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: warning
+  - alert: ExchangeLowResponseRate
+    annotations:
+      summary: Under 50% of bid requests on {{ $labels.exchange }} get a response
+    expr: "(\n  sum by (exchange) (rate(bid_responses_total[2m]))\n    or\n  sum by\
+      \ (exchange) (rate(bid_requests_total[2m])) * 0\n)\n/ sum by (exchange) (rate(bid_requests_total[2m])\
+      \ > 0)\n< 0.5\n"
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: critical
+  - alert: ExchangeHighLatencyP99
+    annotations:
+      summary: p99 bid latency on {{ $labels.exchange }} above 200ms
+    expr: histogram_quantile(0.99, sum by (le, exchange) (rate(bid_latency_seconds_bucket[2m])))
+      > 0.2
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: warning
+- interval: 30s
+  name: platform-health
+  rules:
+  - alert: AdtechAppDown
+    annotations:
+      summary: adtech-app scrape target is down
+    expr: up{job="adtech-app"} == 0
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: critical
+  - alert: AdtechAppMetricsMissing
+    annotations:
+      summary: No data at all for job=adtech-app; check Prometheus and remote write
+    expr: absent_over_time(up{job="adtech-app"}[5m])
+    for: 1m
+    labels:
+      ruleset: fixed
+      severity: critical
+  - alert: RuleEvaluationFailures
+    annotations:
+      summary: Rule group {{ $labels.rule_group }} is failing to evaluate
+    expr: sum by (rule_group) (increase(cortex_prometheus_rule_evaluation_failures_total[5m]))
+      > 0
+    labels:
+      ruleset: fixed
+      severity: critical
+  - alert: RuleGroupMissedIterations
+    annotations:
+      summary: Rule group {{ $labels.rule_group }} is missing evaluations
+    expr: sum by (rule_group) (increase(cortex_prometheus_rule_group_iterations_missed_total[5m]))
+      > 0
+    labels:
+      ruleset: fixed
+      severity: warning

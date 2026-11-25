@@ -1,0 +1,33 @@
+# PHASE 2 - Same group as phase 1, plus explicit "no data" alerts.
+# Loading this replaces the cpu-alerts group from phase 1.
+namespace: poc
+groups:
+  - name: cpu-alerts
+    interval: 30s
+    rules:
+      # Unchanged baseline rule
+      - alert: CpuUsageDemo
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{job="node", mode="idle"}[2m])) * 100) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}%"
+
+      # NEW: target is still known to Prometheus but scrapes fail
+      - alert: CpuTargetDown
+        expr: up{job="node"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scrape target {{ $labels.instance }} is down - CpuUsageDemo cannot be evaluated"
+
+      # NEW: the metric the CPU alert depends on has disappeared ("no data")
+      - alert: CpuMetricsNoData
+        expr: absent_over_time(node_cpu_seconds_total{job="node", mode="idle"}[3m])
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No CPU data for job=node in the last 3m - CpuUsageDemo cannot be evaluated"

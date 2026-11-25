@@ -1,0 +1,101 @@
+# PHASE 2 - Same business alerts, hardened against "no data", plus platform-health rules.
+# Loaded next to phase 1 (different group) so both can be compared in the same test run:
+#   ALERTS{ruleset="naive"}  vs  ALERTS{ruleset="fixed"}
+namespace: adtech
+groups:
+  - name: fixed
+    interval: 30s
+    rules:
+      # Unchanged: works whenever the series exist
+      - alert: ExchangeLowBidRequests
+        expr: sum by (exchange) (rate(bid_requests_total[2m])) < 10
+        for: 1m
+        labels: { ruleset: fixed, severity: warning }
+        annotations:
+          summary: "Bid requests from {{ $labels.exchange }} below 10/s"
+
+      # NEW (pattern 1): an exchange that had traffic recently now has none,
+      # whether its series disappeared or stopped increasing.
+      # Detection lasts as long as the lookback window: 30m here, use 1h-24h in production.
+      - alert: ExchangeNoTraffic
+        expr: |
+          count by (exchange) (last_over_time(bid_requests_total[30m]))
+            unless
+          count by (exchange) (rate(bid_requests_total[2m]) > 0)
+        for: 1m
+        labels: { ruleset: fixed, severity: critical }
+        annotations:
+          summary: "No bid traffic from {{ $labels.exchange }} (series missing or flat)"
+
+      # FIXED (pattern 2 + 4): a missing wins series counts as 0 wins, but only for
+      # exchanges that are actually sending responses.
+      - alert: ExchangeLowWinRate
+        expr: |
+          (
+            sum by (exchange) (rate(bids_won_total[2m]))
+              or
+            sum by (exchange) (rate(bid_responses_total[2m])) * 0
+          )
+          / sum by (exchange) (rate(bid_responses_total[2m]) > 0)
+          < 0.05
+        for: 1m
+        labels: { ruleset: fixed, severity: warning }
+        annotations:
+          summary: "Win rate on {{ $labels.exchange }} below 5%"
+
+      # NEW (pattern 3): requests arrive but responses don't. Latency and win-rate
+      # become NaN in this case, so this rule is what catches it.
+      - alert: ExchangeLowResponseRate
+        expr: |
+          (
+            sum by (exchange) (rate(bid_responses_total[2m]))
+              or
+            sum by (exchange) (rate(bid_requests_total[2m])) * 0
+          )
+          / sum by (exchange) (rate(bid_requests_total[2m]) > 0)
+          < 0.5
+        for: 1m
+        labels: { ruleset: fixed, severity: critical }
+        annotations:
+          summary: "Under 50% of bid requests on {{ $labels.exchange }} get a response"
+
+      # Unchanged: only meaningful with traffic; no-traffic / no-response cases
+      # are covered by ExchangeNoTraffic and ExchangeLowResponseRate.
+      - alert: ExchangeHighLatencyP99
+        expr: histogram_quantile(0.99, sum by (le, exchange) (rate(bid_latency_seconds_bucket[2m]))) > 0.2
+        for: 1m
+        labels: { ruleset: fixed, severity: warning }
+        annotations:
+          summary: "p99 bid latency on {{ $labels.exchange }} above 200ms"
+
+  - name: platform-health
+    interval: 30s
+    rules:
+      # Pattern 7: the whole app stops being scraped
+      - alert: AdtechAppDown
+        expr: up{job="adtech-app"} == 0
+        for: 1m
+        labels: { ruleset: fixed, severity: critical }
+        annotations:
+          summary: "adtech-app scrape target is down"
+
+      # The whole pipeline (Prometheus / remote write) stops sending
+      - alert: AdtechAppMetricsMissing
+        expr: absent_over_time(up{job="adtech-app"}[5m])
+        for: 1m
+        labels: { ruleset: fixed, severity: critical }
+        annotations:
+          summary: "No data at all for job=adtech-app; check Prometheus and remote write"
+
+      # Error layer (pattern 6): any rule in this tenant failed to evaluate
+      - alert: RuleEvaluationFailures
+        expr: sum by (rule_group) (increase(cortex_prometheus_rule_evaluation_failures_total[5m])) > 0
+        labels: { ruleset: fixed, severity: critical }
+        annotations:
+          summary: "Rule group {{ $labels.rule_group }} is failing to evaluate"
+
+      - alert: RuleGroupMissedIterations
+        expr: sum by (rule_group) (increase(cortex_prometheus_rule_group_iterations_missed_total[5m])) > 0
+        labels: { ruleset: fixed, severity: warning }
+        annotations:
+          summary: "Rule group {{ $labels.rule_group }} is missing evaluations"

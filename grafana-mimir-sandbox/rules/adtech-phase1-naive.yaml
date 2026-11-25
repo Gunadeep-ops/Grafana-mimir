@@ -1,0 +1,38 @@
+# PHASE 1 - "As-is" ad-tech alert rules, written the usual way.
+# These work while every series exists, but go silent in the failure scenarios.
+namespace: adtech
+groups:
+  - name: naive
+    interval: 30s
+    rules:
+      - alert: ExchangeLowBidRequests
+        expr: sum by (exchange) (rate(bid_requests_total[2m])) < 10
+        for: 1m
+        labels: { ruleset: naive, severity: warning }
+        annotations:
+          summary: "Bid requests from {{ $labels.exchange }} below 10/s"
+
+      - alert: ExchangeLowWinRate
+        expr: |
+          sum by (exchange) (rate(bids_won_total[2m]))
+            /
+          sum by (exchange) (rate(bid_responses_total[2m]))
+          < 0.05
+        for: 1m
+        labels: { ruleset: naive, severity: warning }
+        annotations:
+          summary: "Win rate on {{ $labels.exchange }} below 5%"
+
+      - alert: ExchangeHighLatencyP99
+        expr: histogram_quantile(0.99, sum by (le, exchange) (rate(bid_latency_seconds_bucket[2m]))) > 0.2
+        for: 1m
+        labels: { ruleset: naive, severity: warning }
+        annotations:
+          summary: "p99 bid latency on {{ $labels.exchange }} above 200ms"
+
+      - alert: CampaignLowImpressions
+        expr: sum by (campaign_id) (rate(impressions_total[2m])) < 0.01
+        for: 1m
+        labels: { ruleset: naive, severity: info }
+        annotations:
+          summary: "Campaign {{ $labels.campaign_id }} is not serving"

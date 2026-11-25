@@ -1,0 +1,39 @@
+# Same rules as rules/adtech-phase1-naive.yaml without the mimirtool "namespace" key (promtool format).
+groups:
+- interval: 30s
+  name: naive
+  rules:
+  - alert: ExchangeLowBidRequests
+    annotations:
+      summary: Bid requests from {{ $labels.exchange }} below 10/s
+    expr: sum by (exchange) (rate(bid_requests_total[2m])) < 10
+    for: 1m
+    labels:
+      ruleset: naive
+      severity: warning
+  - alert: ExchangeLowWinRate
+    annotations:
+      summary: Win rate on {{ $labels.exchange }} below 5%
+    expr: "sum by (exchange) (rate(bids_won_total[2m]))\n  /\nsum by (exchange) (rate(bid_responses_total[2m]))\n\
+      < 0.05\n"
+    for: 1m
+    labels:
+      ruleset: naive
+      severity: warning
+  - alert: ExchangeHighLatencyP99
+    annotations:
+      summary: p99 bid latency on {{ $labels.exchange }} above 200ms
+    expr: histogram_quantile(0.99, sum by (le, exchange) (rate(bid_latency_seconds_bucket[2m])))
+      > 0.2
+    for: 1m
+    labels:
+      ruleset: naive
+      severity: warning
+  - alert: CampaignLowImpressions
+    annotations:
+      summary: Campaign {{ $labels.campaign_id }} is not serving
+    expr: sum by (campaign_id) (rate(impressions_total[2m])) < 0.01
+    for: 1m
+    labels:
+      ruleset: naive
+      severity: info

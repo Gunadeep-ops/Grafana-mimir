@@ -1,0 +1,9 @@
+# Used for any tenant without its own Alertmanager config.
+# Alerts are visible in the UI/API; add real receivers (email, Slack, webhook) as needed.
+route:
+  receiver: default
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 1h
+receivers:
+  - name: default

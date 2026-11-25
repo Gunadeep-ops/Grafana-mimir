@@ -1,0 +1,15 @@
+# PHASE 1 - Baseline: a normal data source-managed rule with NO "no data" handling.
+# Threshold is deliberately > 0 so the alert is always firing while data exists.
+# (In production this would be something like > 80.)
+namespace: poc
+groups:
+  - name: cpu-alerts
+    interval: 30s
+    rules:
+      - alert: CpuUsageDemo
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{job="node", mode="idle"}[2m])) * 100) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}%"

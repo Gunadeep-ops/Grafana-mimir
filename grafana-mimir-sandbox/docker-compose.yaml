@@ -1,0 +1,64 @@
+name: grafana-mimir-sandbox
+
+services:
+  mimir:
+    image: grafana/mimir:${MIMIR_VERSION}
+    command: ["-config.file=/etc/mimir/mimir.yaml"]
+    user: "0"   # sandbox only: avoids volume permission issues
+    volumes:
+      # whole folder, so edits to runtime.yaml are picked up live (needed on Windows)
+      - ./mimir:/etc/mimir:ro
+      - mimir-data:/data
+    ports:
+      - "9009:9009"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION}
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      TENANT_ID: ${TENANT_ID}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mimir
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=1d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - mimir
+    restart: unless-stopped
+
+  # Demo ad-tech exporter with failure controls: http://localhost:8000
+  adtech-app:
+    build: ./adtech-app
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # Demo target: stop it to simulate "no data"
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+
+  # Optional CLI for loading data source-managed rules:
+  #   docker compose run --rm mimirtool rules load /rules/poc-rules.yaml --address=http://mimir:9009 --id=sandbox
+  mimirtool:
+    image: grafana/mimirtool:${MIMIR_VERSION}
+    profiles: ["tools"]
+    volumes:
+      - ./rules:/rules:ro
+
+volumes:
+  mimir-data:
+  grafana-data:
