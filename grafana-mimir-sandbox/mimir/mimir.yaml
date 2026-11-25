@@ -17,9 +17,6 @@ server:
 
 # Classic architecture (no Kafka). If production uses ingest storage,
 # add Kafka and set this to true with the matching ingest_storage.kafka.* settings.
-ingest_storage:
-  enabled: false
-
 # Filesystem storage keeps the sandbox simple. Production likely uses S3/GCS/Azure;
 # switch to that backend if you want to test storage behavior too.
 blocks_storage:
@@ -29,7 +26,7 @@ blocks_storage:
   tsdb:
     dir: /data/tsdb
   bucket_store:
-    sync_dir: /data/tsdb-sync
+    sync_dir: /data/bucket-sync
 
 compactor:
   data_dir: /data/compactor
@@ -44,14 +41,14 @@ store_gateway:
 
 # --- Ruler: evaluates data source-managed rules ---
 ruler:
-  rule_path: /data/ruler-tmp
+  rule_path: /data/rules-local
   alertmanager_url: http://localhost:9009/alertmanager
   enable_api: true
 
 ruler_storage:
   backend: filesystem
   filesystem:
-    dir: /data/ruler
+    dir: /data/rules-storage
 
 # --- Alertmanager: receives alerts from the ruler ---
 alertmanager:
@@ -65,4 +62,4 @@ alertmanager:
 alertmanager_storage:
   backend: filesystem
   filesystem:
-    dir: /data/alertmanager-config
+    dir: /data/am-storage
